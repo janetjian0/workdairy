@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場報工系統 - 行事曆 (進度版)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; color: #333; font-size: 13px; }
+        .header-bar { background-color: #1e2b3c; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 45px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+        .header-title { font-size: 14px; font-weight: bold; }
+        .top-nav { display: flex; gap: 5px; }
+        .nav-btn { padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 12px; cursor: pointer; color: #b2bec3; background: transparent; border: 1px solid transparent; transition: 0.2s; text-decoration: none; }
+        .nav-btn.active { background-color: #3498db; color: white; }
+        .nav-link-set { color: #f1c40f; border: 1px solid #f1c40f; }
+
+        .main-wrapper { max-width: 98%; margin: 15px auto; }
+        .cal-container { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .cal-header { background: #fff; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; }
+        .month-title { font-size: 18px; font-weight: bold; color: #2c3e50; }
+        .btn-arrow { background: #f8f9fa; border: 1px solid #ddd; padding: 5px 15px; cursor: pointer; border-radius: 4px; }
+        
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid #eee; border-left: 1px solid #eee; }
+        .weekday { background: #f8f9fa; padding: 10px; text-align: center; font-weight: bold; border-right: 1px solid #eee; border-bottom: 1px solid #eee; color: #7f8c8d; }
+        
+        .cal-cell { min-height: 180px; padding: 5px; border-right: 1px solid #eee; border-bottom: 1px solid #eee; background: #fff; }
+        .cal-cell.other-month { background-color: #fcfcfc; color: #ccc; }
+        .cal-date-num { font-weight: bold; margin-bottom: 8px; font-size: 14px; }
+        .today { background-color: #fff9db !important; }
+        
+        /* 報工項目基礎樣式 */
+        .report-item { 
+            padding: 4px 6px; 
+            border-radius: 3px; 
+            font-size: 11px; 
+            margin-bottom: 4px; 
+            line-height: 1.4;
+            cursor: pointer;
+            word-break: break-all;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+
+        /* 🚀 計劃日期區塊 (淺藍) */
+        .item-plan { background-color: #e3f2fd; border-left: 3px solid #2196f3; color: #0d47a1; }
+        .item-plan::before { content: "📅 [計] "; font-weight: bold; }
+
+        /* 🚀 實際日期區塊 (淺綠) */
+        .item-actual { background-color: #e8f5e9; border-left: 3px solid #4caf50; color: #1b5e20; }
+        .item-actual::before { content: "✅ [實] "; font-weight: bold; }
+
+        .report-item b { font-weight: bold; }
+        .location-tag { color: #666; font-style: normal; font-size: 10px; }
+    </style>
+</head>
+<body>
+
+    <header class="header-bar">
+        <div class="header-title" id="welcomeMsg">📅 報工行事曆</div>
+        <div class="top-nav" id="dynamicNav"></div>
+    </header>
+
+    <div class="main-wrapper">
+        <div class="cal-container">
+            <div class="cal-header">
+                <button class="btn-arrow" onclick="changeMonth(-1)">❮ 上個月</button>
+                <div class="month-title" id="currentMonthStr"></div>
+                <button class="btn-arrow" onclick="changeMonth(1)">下個月 ❯</button>
+            </div>
+            <div class="cal-grid" id="calendarGrid"></div>
+        </div>
+    </div>
+
+    <script type="module">
+         import { SUPABASE_CONFIG } from './config.js';
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js';
+        
+        const SUPABASE_URL = 'https://uvglebltcpfbciqhziqc.supabase.co';
+        //     const SUPABASE_KEY = 'sb_publishable_Z8UUFXRIt_KrjHY6eWsPfg_eQ4d7Mkb';
+       //     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+       //const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+       const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+       
+        let currentDisplayDate = new Date();
+        const userJson = localStorage.getItem('erp_user');
+        const currentUser = userJson ? JSON.parse(userJson) : { name: "" };
+
+        window.onload = () => {
+            renderNav();
+            renderCalendar();
+        };
+
+        function renderNav() {
+            const nav = document.getElementById('dynamicNav');
+            const userName = encodeURIComponent(currentUser.name);
+            nav.innerHTML = `
+                <a href="main.html" class="nav-btn">📝 填寫報工</a>
+                <a href="dairyList.html?user=${userName}" class="nav-btn nav-link-set">📋 當日明細</a>
+                <a href="calendar.html?user=${userName}" class="nav-btn active nav-link-set">📅 行事曆</a>
+                <a href="settings.html" class="nav-btn nav-link-set">⚙️ 基本設定</a>
+            `;
+        }
+
+        async function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            const title = document.getElementById('currentMonthStr');
+            const year = currentDisplayDate.getFullYear();
+            const month = currentDisplayDate.getMonth();
+            title.innerText = `${year}年 ${month + 1}月`;
+
+            grid.innerHTML = ['日','一','二','三','四','五','六'].map(d => `<div class="weekday">${d}</div>`).join('');
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+            const prevLastDate = new Date(year, month, 0).getDate();
+
+            // 抓取包含計劃與實際日期的所有報工
+            const { data: reports } = await supabase
+                .from('daily_reports')
+                .select('*, report_work_items(description)');
+
+            // 1. 上個月填充
+            for (let i = firstDay; i > 0; i--) {
+                grid.innerHTML += `<div class="cal-cell other-month"><div class="cal-date-num">${prevLastDate - i + 1}</div></div>`;
+            }
+
+            // 2. 本月渲染
+            for (let d = 1; d <= lastDate; d++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const targetDate = new Date(dateStr);
+                const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                
+                // 篩選該日期屬於「計劃範圍」或「實際範圍」的資料
+                let dayHtml = "";
+
+                reports?.forEach(r => {
+                    const planStart = new Date(r.plan_start_date);
+                    const planEnd = new Date(r.plan_end_date);
+                    const actStart = new Date(r.actual_start_date);
+                    const actEnd = new Date(r.actual_end_date);
+                    
+                    const desc = r.report_work_items?.map(wi => wi.description).join('、') || '無描述';
+                    const baseInfo = `${r.category}、${r.sub_category}、${r.buildings?.join('')}${r.floors?.join('')}、${desc}、<b>${r.staff_name}</b>、${r.report_type}`;
+
+                    // 如果在計劃日期內 -> 淺藍色
+                    if (targetDate >= planStart && targetDate <= planEnd) {
+                        dayHtml += `<div class="report-item item-plan" onclick="location.href='dairyList.html?user=${encodeURIComponent(r.staff_name)}&date=${r.report_date}'">${baseInfo}</div>`;
+                    }
+                    // 如果在實際日期內 -> 淺綠色
+                    if (r.actual_start_date && r.actual_end_date && targetDate >= actStart && targetDate <= actEnd) {
+                        dayHtml += `<div class="report-item item-actual" onclick="location.href='dairyList.html?user=${encodeURIComponent(r.staff_name)}&date=${r.report_date}'">${baseInfo}</div>`;
+                    }
+                });
+
+                grid.innerHTML += `
+                    <div class="cal-cell ${isToday ? 'today' : ''}">
+                        <div class="cal-date-num">${d}</div>
+                        ${dayHtml}
+                    </div>`;
+            }
+        }
+
+        window.changeMonth = (offset) => {
+            currentDisplayDate.setMonth(currentDisplayDate.getMonth() + offset);
+            renderCalendar();
+        };
+    </script>
+</body>
+</html>

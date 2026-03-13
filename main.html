@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場報工系統 - 作業端</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; font-size: 13px; }
+        .header-bar { background-color: #1e2b3c; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 45px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+        .header-title { font-size: 14px; font-weight: bold; }
+        .top-nav { display: flex; gap: 5px; }
+        .nav-btn { padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 12px; cursor: pointer; color: #b2bec3; background: transparent; border: 1px solid transparent; transition: 0.2s; text-decoration: none; }
+        .nav-btn.active { background-color: #3498db; color: white; }
+        .nav-link-set { color: #f1c40f; border: 1px solid #f1c40f; }
+        .nav-logout { color: #ff7675; border: 1px solid #ff7675; }
+
+        .main-wrapper { max-width: 1400px; margin: 15px auto; padding: 0 15px; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: start; }
+        .panel-wrapper { background: white; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); border: 1px solid #dcdde1; margin-bottom: 15px; overflow: hidden; }
+        .form-group { padding: 12px 15px; border-bottom: 1px solid #ecf0f1; }
+        .form-group:last-child { border-bottom: none; }
+        label.title { font-weight: bold; color: #2c3e50; font-size: 13px; display: block; margin-bottom: 10px; }
+        
+        .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-end; }
+        .col { flex: 1; min-width: 0; }
+        .col label { display: block; font-size: 11px; color: #7f8c8d; margin-bottom: 3px; font-weight: 600; }
+        input, select { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #cdd3d8; border-radius: 4px; background: white; font-size: 13px; }
+        
+        .toggle-btn { flex: 1; padding: 7px; text-align: center; border: 1px solid #cdd3d8; border-radius: 4px; cursor: pointer; font-weight: bold; background: white; font-size: 12px; transition: 0.2s; }
+        .toggle-btn.active { background-color: #3498db; color: white; border-color: #3498db; }
+
+/* 日期欄位：小字體、灰色、紫色背景 */
+    input[type="date"] {        
+        font-size: 13px !important;
+        border: 1px solid #cdd3d8;
+        padding: 5px;
+        border-radius: 4px;
+    }
+
+    /* 針對日期內部的 年/月/日 數字強制小字與灰色 */
+    input[type="date"]::-webkit-datetime-edit-text,
+    input[type="date"]::-webkit-datetime-edit-month-field,
+    input[type="date"]::-webkit-datetime-edit-day-field,
+    input[type="date"]::-webkit-datetime-edit-year-field {
+        
+        font-size: 13px;
+    }
+    /* 讓整個時程列變成橫向排列 */
+    .time-range-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;           /* 元素間的間距 */
+        margin-bottom: 10px;
+    }
+
+    /* 固定標籤寬度 */
+    .time-label {
+        flex: 0 0 60px;     /* 固定寬度，讓「計劃」與「實際」對齊 */
+        font-size: 12px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+
+    /* 讓日期輸入框平分剩餘空間 */
+    .date-input-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    /* 調整日期內的字體 (依您的要求：小字、灰色) */
+    .date-input-wrapper input[type="date"] {
+        flex: 1;
+        font-size: 11px !important;
+        color: #7f8c8d !important;
+        padding: 4px;
+        border: 1px solid #cdd3d8;
+        border-radius: 4px;
+    }
+
+    /* 中間的「~」符號樣式 */
+    .date-separator {
+        color: #95a5a6;
+        font-size: 12px;
+    }
+
+        .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; padding: 5px 0; }        
+        /* 1. 預設狀態：文字變大但顏色維持一般深灰色 */
+.checkbox-item span {
+    color: #2c3e50;     
+    font-size: 14px;    
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s; /* 增加變色平滑感 */
+}
+
+/* 2. 勾選框變大 */
+.checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* 3. 【關鍵】當勾選框被選取時，後方的 span 文字變為深紅色 */
+.checkbox-item input[type="checkbox"]:checked + span {
+    color: #B22222;     /* 深紅色 */
+    font-weight: bold;  /* 勾選後加粗，視覺更明顯 */
+}
+
+/* 4. 調整間距，讓點選更方便 */
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-bottom: 8px;
+}
+
+/* 隱藏原始勾選框，但保留功能 */
+.location-btn-item input[type="checkbox"] {
+    display: none;
+}
+
+/* 預設按鈕樣式 */
+.location-btn-item span {
+    display: inline-block;
+    padding: 8px 12px;
+    margin: 4px;
+    background-color: #f8f9fa; /* 未選取時灰色背景 */
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    color: #495057;           /* 深灰色字體 */
+    font-size: 14px;          /* 字體變大 */
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+/* 當按鈕被勾選時的樣式 (深紅字、紫色背景) */
+.location-btn-item input[type="checkbox"]:checked + span {
+    background-color: #F3E5F5; /* 您偏好的 ERP 紫色背景 */
+    border-color: #673AB7;     /* 紫色邊框 */
+    color: #B22222;           /* 您要求的深紅字 */
+    box-shadow: 0 2px 4px rgba(103, 58, 183, 0.2);
+}
+
+/* 懸停效果 */
+.location-btn-item span:hover {
+    border-color: #673AB7;
+}
+
+/* 移除大標題後，強化副標題 (棟別、樓層) */
+.location-header {
+    font-size: 12px !important; /* 字體放大 */
+    font-weight: 800 !important; /* 字體加粗 */
+    color: #1a2533 !important;  /* 顏色變深 (深藍黑) */
+    margin-bottom: 5px !important;
+    display: block;
+}
+/* 專門縮小施工位置區塊的內邊距 */
+.compact-group {
+    padding: 5px 10px !important; /* 原本是 12px 15px，縮小上下間距 */
+}
+
+/* 縮小棟別與樓層標籤與勾選區的距離 */
+.compact-group .col label {
+    margin-bottom: 2px !important; /* 讓「棟別」標籤更貼近勾選框 */
+}
+
+/* 讓棟別和樓層之間的間隔也縮小一點 */
+.location-flex-container {
+    display: flex; 
+    gap: 10px !important; /* 原本是 20px，縮小左右棟別與樓層的距離 */
+}
+        .dynamic-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; background: #fafafa; padding: 6px; border-radius: 4px; border: 1px solid #eee; }
+        .btn-add { background: #eef9fe; color: #2980b9; border: 1px solid #b9dbe6; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; }
+        .btn-remove { background: #fff5f5; border: 1px solid #ffcccc; color: #e74c3c; cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: 4px; }
+        .btn-submit { padding: 12px; background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: normal; cursor: pointer; width: 100%; font-size: 14px; margin-top: 10px; }
+        .btn-cancel { padding: 12px; background: #5c849b; color: white; border: none; border-radius: 5px; font-weight: normal; cursor: pointer; width: 100%; font-size: 14px; margin-top: 10px; }
+       
+        #detail-view { display: none; }
+        .report-card { border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 12px; background: #fff; }
+    </style>
+</head>
+<body>
+
+    <header class="header-bar">
+        <div class="header-title" id="welcomeMsg">🏗️ 現場報工系統</div>
+        <div class="top-nav">
+            <button class="nav-btn active" id="nav-form">📝 填寫報工</button>
+             <a href="dairyList.html" class="nav-btn nav-link-set" id="nav-dairyList">📋 當日明細</a>
+             <a href="calendar.html" class="nav-btn nav-link-set" id="nav-calendar">📅 行事曆</a>    
+             <a href="granttChart.html" class="nav-btn nav-link-set">📊 進度甘特圖</a>         
+            <a href="settings.html" class="nav-btn nav-link-set" id="nav-settings">⚙️ 基本設定</a>
+             <button class="nav-btn nav-logout" onclick="handleLogout()">🚪 登出系統</button>
+            </div>
+    </header>
+
+    <div class="main-wrapper">
+        <div id="form-view" class="grid-container">
+            <div class="panel-wrapper">
+                <div class="form-group">
+                    <label class="title">📋 基本資訊</label>
+                    <div class="row">
+                        <div class="col" style="flex: 1.5;"><label>專案名稱</label><select id="projectName"><option value="">載入專案中...</option></select></div>                        
+                        <div class="col"><label>工務人員</label><select id="staffName"><option value="">載入中...</option></select></div>
+                        <div class="col" style="flex: 1.2;"><label>報工日期</label><input type="date" id="reportDate"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="title">📅 日報類別</label>
+                    <div class="type-group" style="display:flex; gap:6px;">
+                        <div class="toggle-btn" onclick="toggleActive(this)">內業工程</div>
+                        <div class="toggle-btn" onclick="toggleActive(this)">進度工程</div>
+                        <div class="toggle-btn active" onclick="toggleActive(this)">現場作業</div>
+                        <div class="toggle-btn" onclick="toggleActive(this)">其他</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>施工大類</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="parentNo" placeholder="編號" style="flex: 0.3; background: #eee;" readonly>
+                        <select id="category" style="flex: 1;" onchange="loadSubCategories()"></select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>作業細項</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="subNo" placeholder="編號" style="flex: 0.3; background: #eee;" readonly>
+                        <select id="sub_category" style="flex: 1;" onchange="updateSubNo()"></select>
+                    </div>
+                </div>
+                <div class="form-group compact-group">
+    
+    <div class="form-group compact-group">
+    <div class="location-flex-container">
+        <div class="col">
+            <label class="location-header">棟別</label>
+            <div id="buildingGroup" class="checkbox-group">載入中...</div>
+        </div>
+        <div class="col" style="flex:2;">
+            <label class="location-header">樓層</label>
+            <div id="floorGroup" class="checkbox-group">載入中...</div>
+        </div>
+    </div>
+</div>
+</div>
+<div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <label class="title" style="margin-bottom:0;">📝 工作事項描述</label>
+                        <button class="btn-add" onclick="addWorkItem()">+ 新增事項</button>
+                    </div>
+                    <div id="workItemsContainer">
+                        <div class="dynamic-row">
+                            <input type="text" class="work-desc" placeholder="請輸入描述..." style="flex:1;">
+                            <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="background-color: #fbfcfc;">
+    <label class="title">⏳ 施工時程</label>
+    
+    <div class="time-range-row">
+        <div class="time-label">計劃日期</div>
+        <div class="date-input-wrapper">
+            <input type="date" id="planStartDate">
+            <span class="date-separator">~</span>
+            <input type="date" id="planEndDate">
+        </div>
+    </div>
+
+    <div class="time-range-row">
+        <div class="time-label">實際日期</div>
+        <div class="date-input-wrapper">
+            <input type="date" id="actualStartDate">
+            <span class="date-separator">~</span>
+            <input type="date" id="actualEndDate">
+        </div>
+    </div>
+</div>
+
+                
+            </div>
+
+            <div class="panel-wrapper">
+                <div class="form-group">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                        <label class="title" style="margin-bottom:0;">👷 出工紀錄</label>
+                        <button class="btn-add" onclick="addLaborRecord()">+ 新增出工</button>
+                    </div>
+                    <div class="row" style="margin-bottom: 5px; padding: 0 6px;">
+                        <div class="col" style="flex: 1.5;"><label>項目</label></div>
+                        <div class="col"><label>當日</label></div>
+                        <div class="col"><label>累計</label></div>
+                        <div style="width: 35px;"></div>
+                    </div>
+                    <div id="laborContainer">
+                        <div class="dynamic-row">
+                            <div class="col" style="flex: 1.5;"><input type="text" class="labor-item" placeholder="工人項目"></div>
+                            <div class="col"><input type="number" class="labor-count" placeholder="0" step="0.5"></div>
+                            <div class="col"><input type="number" class="labor-total" placeholder="0" step="0.5"></div>
+                            <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="title">📌 目前狀態</label>
+                    <div class="status-group" style="display:flex; gap:6px;">
+                        <div class="toggle-btn" onclick="toggleActive(this)">追蹤</div>
+                        <div class="toggle-btn active" onclick="toggleActive(this)">施工中</div>
+                        <div class="toggle-btn" onclick="toggleActive(this)">完成</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div id="submit-btn-area" style="display: flex; gap: 8px;">
+                        <button class="btn-submit" style="flex: 1; margin-top: 0;" onclick="submitToSupabase()">🚀 新增報工單</button>
+                        <button id="btn-cancel-edit" class="btn-cancel" style="flex: 1; margin-top: 0;"  onclick="cancelEditMode()">🔙   取  消   </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="detail-view">
+            <div class="panel-wrapper">
+                <div class="form-group"><label class="title">📋 今日報工明細回顧</label><div id="reportList">讀取中...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 1. 登入檢查邏輯
+        const userJson = localStorage.getItem('erp_user');
+        if (!userJson) { window.location.href = 'index.html'; }
+        const currentUser = JSON.parse(userJson);
+
+        // 初始化資訊
+        document.getElementById('welcomeMsg').innerText = `🏗️ 報工系統 - ${currentUser.name} (${currentUser.no})`;
+        document.getElementById('staffName').value = currentUser.name;
+        //if (!currentUser.isManager) { document.getElementById('nav-settings').style.display = 'none'; }
+
+        // 2. 載入 SDK
+        import { SUPABASE_CONFIG } from './config.js';
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js'
+         const SUPABASE_URL = 'https://uvglebltcpfbciqhziqc.supabase.co';
+   //     const SUPABASE_KEY = 'sb_publishable_Z8UUFXRIt_KrjHY6eWsPfg_eQ4d7Mkb';
+   //     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    //const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+    const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+
+        document.getElementById('reportDate').valueAsDate = new Date();
+        initApp();
+
+        // 確保 handleLogout 被定義在全域 window 下
+        window.handleLogout = () => {
+        if(confirm("確定要登出系統嗎？")) {
+            // 1. 清除登入快取
+            localStorage.removeItem('erp_user');
+            
+            // 2. 導回登入頁面
+            window.location.replace('index.html'); 
+        }
+         };
+
+        // 在 initApp 函式中加入 edit_id 的判斷
+async function initApp() {
+    await Promise.all([
+        loadProjectDropdown(), 
+        loadCategories(), 
+        loadLocationConfig(),
+        loadStaffDropdown()
+    ]);
+
+    // 檢查是否有編輯 ID
+    const urlParams = new URLSearchParams(window.location.search);
+    const editId = urlParams.get('edit_id');
+    if (editId) {
+        await loadExistingReport(editId);
+    }
+}
+        // --- 功能函式 ---
+        window.handleLogout = () => {
+            if(confirm("確定要登出嗎？")) { localStorage.removeItem('erp_user'); window.location.href = 'index.html'; }
+        };
+
+        window.toggleActive = (el) => {
+            el.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        };
+
+        window.addWorkItem = () => {
+            const div = document.createElement('div'); div.className = 'dynamic-row';
+            div.innerHTML = `<input type="text" class="work-desc" style="flex:1;"><button class="btn-remove" onclick="this.parentElement.remove()">✖</button>`;
+            document.getElementById('workItemsContainer').appendChild(div);
+        };
+
+        window.addLaborRecord = () => {
+            const div = document.createElement('div'); div.className = 'dynamic-row';
+            div.innerHTML = `<div class="col" style="flex: 1.5;"><input type="text" class="labor-item"></div><div class="col"><input type="number" class="labor-count"></div><div class="col"><div class="col"><input type="number" class="labor-total"></div></div><button class="btn-remove" onclick="this.parentElement.remove()">✖</button>`;
+            document.getElementById('laborContainer').appendChild(div);
+        };
+
+        // --- 資料載入 ---
+        async function loadProjectDropdown() {
+            const { data } = await supabase.from('projects').select('project_no, project_name');
+            if(data) document.getElementById('projectName').innerHTML = data.map(p => `<option value="${p.project_name}">[${p.project_no}] ${p.project_name}</option>`).join('');
+        }
+
+        // 🚀 全域變數存放原始資料以便查詢編號
+let allCategories = [];
+
+async function loadCategories() {
+    const { data } = await supabase.from('construction_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('parent_no', { ascending: true })
+        .order('sub_no', { ascending: true });
+    
+    if (data) {
+        allCategories = data;
+        const categorySelect = document.getElementById('category');
+        
+        // 🚀 核心修正：加入空白預設選項
+        const parents = [...new Set(data.map(item => item.parent_category))];
+        categorySelect.innerHTML = `<option value="">-- 請選擇施工大類 --</option>` + 
+            parents.map(p => `<option value="${p}">${p}</option>`).join('');
+            
+        // 🚀 確保有這一行，當大類改變時觸發細項與編號更新
+        categorySelect.onchange = loadSubCategories;
+        // 初始化時清空細項與編號
+        clearSubAndNos();
+    }
+}
+
+function loadSubCategories() {
+    const parentName = document.getElementById('category').value;
+    const subSelect = document.getElementById('sub_category');
+    const parentNoInput = document.getElementById('parentNo');
+
+    // 🚀 核心修正：若大類為空白，則清空相關欄位
+    if (!parentName) {
+        clearSubAndNos();
+        return;
+    }
+
+    const filtered = allCategories.filter(item => item.parent_category === parentName);
+    
+    if (filtered.length > 0) {
+        parentNoInput.value = filtered[0].parent_no || '';
+        
+        // 🚀 核心修正：細項也加入空白預設選項
+        subSelect.innerHTML = `<option value="">-- 請選擇作業細項 --</option>` + 
+            filtered.map(item => 
+                `<option value="${item.sub_category}" data-subno="${item.sub_no || ''}">${item.sub_category}</option>`
+            ).join('');
+            // 🚀 關鍵修正：在這裡手動綁定 onchange 事件
+        // 當使用者切換「作業細項」時，立即執行 updateSubNo 函式來更新編號
+        subSelect.onchange = updateSubNo;
+    }
+    updateSubNo();
+}
+
+function clearSubAndNos() {
+    document.getElementById('sub_category').innerHTML = `<option value="">-- 請先選擇大類 --</option>`;
+    document.getElementById('parentNo').value = '';
+    document.getElementById('subNo').value = '';
+}
+
+// 🚀 新增：當細項切換時更新作業編號
+function updateSubNo() {
+    const subSelect = document.getElementById('sub_category');
+    const subNoInput = document.getElementById('subNo');
+    
+    if (subSelect && subNoInput) {
+        const selectedOption = subSelect.options[subSelect.selectedIndex];
+        // 讀取 dataset.subno (對應 HTML 的 data-subno)
+        // 若無資料則顯示空字串，避免出現 undefined
+        subNoInput.value = (selectedOption && selectedOption.dataset.subno) || '';
+    }
+}
+        async function loadLocationConfig() {
+            const { data } = await supabase.from('system_configs').select('*').eq('config_key', 'location_settings').single();
+          if(data) {
+         // 修改棟別生成邏輯
+        document.getElementById('buildingGroup').innerHTML = data.config_value.buildings.map(b => 
+            `<label class="location-btn-item">
+                <input type="checkbox" name="building" value="${b}">
+                <span>${b}</span>
+            </label>`).join('');
+        
+        // 修改樓層生成邏輯
+        document.getElementById('floorGroup').innerHTML = data.config_value.floors.map(f => 
+            `<label class="location-btn-item">
+                <input type="checkbox" name="floor" value="${f}">
+                <span>${f}</span>
+            </label>`).join('');
+    }
+        }
+        // --- 新增的功能函式 ---
+async function loadStaffDropdown() {
+    // 從 staff 資料表抓取員工姓名
+    const { data, error } = await supabase
+        .from('staff')
+        .select('name')
+        .order('name', { ascending: true });
+
+    if (data) {
+        const staffSelect = document.getElementById('staffName');
+        // 生成選項，並將預設值設為當前登入者
+        staffSelect.innerHTML = data.map(s => 
+            `<option value="${s.name}" ${s.name === currentUser.name ? 'selected' : ''}>${s.name}</option>`
+        ).join('');
+    } else if (error) {
+        console.error("載入員工清單失敗:", error);
+    }
+}
+
+async function loadExistingReport(reportId) {
+    try {
+        // 1. 🚀 核心修正：確保所有基礎下拉選單資料已優先載入完成
+        await Promise.all([loadProjects(), loadStaff(), loadCategories()]);
+
+        // 2. 從 Supabase 抓取該筆報工單的主表與關聯子表資料
+        const { data: report, error } = await supabase
+            .from('daily_reports')
+            .select('*, report_work_items(*), report_labor_records(*)')
+            .eq('id', reportId)
+            .single();
+
+        if (error) throw error;
+
+        if (report) {
+            // 3. 回填基本資訊欄位
+            document.getElementById('reportId').value = report.id;
+            document.getElementById('projectName').value = report.project_name;
+            document.getElementById('staffName').value = report.staff_name;
+            document.getElementById('reportDate').value = report.report_date;
+
+            // 4. 🚀 修正 ID：將原本錯誤的 mainCategory 改為與 HTML 一致的 category
+            const catEl = document.getElementById('category');
+            if (catEl) {
+                catEl.value = report.category;
+                
+                // 🚀 關鍵：手動觸發連動，載入細項選單
+                await loadSubCategories(); 
+                
+                // 5. 🚀 使用延遲確保細項選單 DOM 已渲染，再填入細項名稱與編號
+                setTimeout(() => {
+                    const subCatEl = document.getElementById('sub_category');
+                    if (subCatEl) subCatEl.value = report.sub_category;
+                    
+                    if (document.getElementById('parentNo')) 
+                        document.getElementById('parentNo').value = report.parent_no || '';
+                    if (document.getElementById('subNo')) 
+                        document.getElementById('subNo').value = report.sub_no || '';
+                }, 100);
+            }
+
+            // 6. 回填日報類別按鈕狀態 (現場/內業/缺失)
+            document.querySelectorAll('.type-group .toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.innerText === report.report_type);
+            });
+
+            // 7. 回填棟別與樓層 (多選項目)
+            document.querySelectorAll('.location-tag').forEach(tag => {
+                const val = tag.dataset.value;
+                if (report.buildings?.includes(val) || report.floors?.includes(val)) {
+                    tag.classList.add('active');
+                } else {
+                    tag.classList.remove('active');
+                }
+            });
+
+            // 8. 回填時程資訊 (計/實 起訖日期)
+            document.getElementById('planStartDate').value = report.plan_start_date || '';
+            document.getElementById('planEndDate').value = report.plan_end_date || '';
+            document.getElementById('actualStartDate').value = report.actual_start_date || '';
+            document.getElementById('actualEndDate').value = report.actual_end_date || '';
+            document.getElementById('statusSelect').value = report.status || '進行中';
+
+            // 9. 回填工作描述項目
+            const workContainer = document.getElementById('workItemsContainer');
+            workContainer.innerHTML = ''; // 清空原本的預設欄位
+            if (report.report_work_items && report.report_work_items.length > 0) {
+                report.report_work_items.forEach(item => {
+                    addWorkItem(item.description); // 呼叫原本的 addWorkItem 函式
+                });
+            } else {
+                addWorkItem(); // 若無資料則顯示一個空白列
+            }
+
+            // 10. 回填出工紀錄項目
+            const laborContainer = document.getElementById('laborRecordsContainer');
+            laborContainer.innerHTML = ''; // 清空原本的預設欄位
+            if (report.report_labor_records && report.report_labor_records.length > 0) {
+                report.report_labor_records.forEach(record => {
+                    addLaborRow(record.item_name, record.today_count); // 呼叫原本的 addLaborRow 函式
+                });
+            } else {
+                addLaborRow(); // 若無資料則顯示一個空白列
+            }
+
+            // 11. 變更提交按鈕為「更新模式」並顯示「取消」按鈕
+            const submitBtn = document.querySelector('.btn-submit');
+            const cancelBtn = document.getElementById('btn-cancel-edit');
+            if (submitBtn) {
+                submitBtn.innerText = "🆙 更新報工單";
+                submitBtn.dataset.editId = report.id;
+            }
+            if (cancelBtn) {
+                cancelBtn.style.display = "block"; // 顯示同一行的取消按鈕
+            }
+
+            console.log("✅ 舊資料載入成功");
+        }
+    } catch (err) {
+        console.error("❌ 載入舊資料失敗:", err.message);
+        alert("無法讀取舊資料，請檢查網路連線或資料庫權限。");
+    }
+}
+
+        // --- 儲存邏輯 ---
+        window.submitToSupabase = async () => {
+            const submitBtn = document.querySelector('.btn-submit');
+            const editId = submitBtn.dataset.editId; // 獲取編輯 ID
+            try {
+                const mainData = {
+                    project_name: document.getElementById('projectName').value,                    
+                    staff_name: document.getElementById('staffName').value, // 這裡會自動抓取 select 選中的值
+                    report_date: document.getElementById('reportDate').value,
+                    report_type: document.querySelector('.type-group .toggle-btn.active').innerText,
+                 // ID 從 mainCategory 改為 category
+                    category: document.getElementById('category').value, 
+                    sub_category: document.getElementById('sub_category').value,
+                    buildings: Array.from(document.querySelectorAll('input[name="building"]:checked')).map(el => el.value),
+                    floors: Array.from(document.querySelectorAll('input[name="floor"]:checked')).map(el => el.value),
+                    plan_start_date: document.getElementById('planStartDate').value || null,
+                    plan_end_date: document.getElementById('planEndDate').value || null,
+                    actual_start_date: document.getElementById('actualStartDate').value || null,
+                    actual_end_date: document.getElementById('actualEndDate').value || null,
+                    status: document.querySelector('.status-group .toggle-btn.active').innerText,
+                    // 🚀 關鍵修正：若欄位值為 null 或 undefined，則存入空字串 ''
+                    parent_no: document.getElementById('parentNo').value || '',
+                    sub_no: document.getElementById('subNo')?.value || ''
+                };
+
+           // 判斷是新增修改
+                let reportId = editId;
+            if (editId) {
+            // --- 模式 A: 編輯更新 ---
+            const { error: uError } = await supabase
+                .from('daily_reports')
+                .update(mainData)
+                .eq('id', editId); // 關鍵：指定 ID 進行更新
+
+            if (uError) throw uError;
+            reportId = editId;
+
+            // 更新子表：先刪除舊的關聯資料，再重新插入新的
+            await supabase.from('report_work_items').delete().eq('report_id', editId);
+            await supabase.from('report_labor_records').delete().eq('report_id', editId);
+        } else {
+            // --- 模式 B: 全新新增 ---
+            const { data: report, error: rError } = await supabase
+                .from('daily_reports')
+                .insert([mainData])
+                .select()
+                .single();
+
+            if (rError) throw rError;
+            reportId = report.id;
+        }
+       // 插入工作事項描述
+        const items = Array.from(document.querySelectorAll('.work-desc'))
+            .map(i => ({ report_id: reportId, description: i.value }))
+            .filter(v => v.description);
+        if (items.length > 0) await supabase.from('report_work_items').insert(items);
+
+        // 插入出工紀錄
+        const labors = Array.from(document.querySelectorAll('#laborContainer .dynamic-row'))
+            .map(row => ({
+                report_id: reportId,
+                item_name: row.querySelector('.labor-item').value,
+                today_count: parseFloat(row.querySelector('.labor-count').value || 0),
+                total_count: parseFloat(row.querySelector('.labor-total').value || 0)
+            })).filter(v => v.item_name);
+        if (labors.length > 0) await supabase.from('report_labor_records').insert(labors);
+
+        alert(editId ? "🎉 更新成功！" : "🎉 新增成功！");
+        // 成功後清空編輯狀態，避免下次誤按變成更新
+        delete submitBtn.dataset.editId;
+        submitBtn.innerText = "🚀 新增報工單";
+        document.getElementById('btn-cancel-edit').style.display = "none"; // 🚀 隱藏取消按鈕
+        
+        // 重置動態欄位 (如您之前的邏輯)
+        resetDynamicFields();
+
+        window.location.href = 'dairyList.html'; // 建議存完後導回明細頁
+      
+        // 3. 其他非 ID 欄位清空（如有額外欄位再加）
+        // 施工時程（日期）通常會跟著新報工單重設，若要清空可加：
+        document.getElementById('planStartDate').value = "";
+        document.getElementById('planEndDate').value = "";
+        document.getElementById('actualStartDate').value = "";
+        document.getElementById('actualEndDate').value = "";
+
+        // 注意：不執行 location.reload()，所以基本資訊、類別、大類、細項都會保留。
+        // --- 修改的部分結束 ---
+        
+            } catch(e) { alert("錯誤: " + e.message); }
+        };
+
+
+        // 🚀 加入此函式：取消編輯模式
+
+        
+window.cancelEditMode = () => {
+    //const cancelBtn = document.getElementById('btn-cancel-edit');
+    //const editId = cancelBtn.dataset.editId; // 獲取編輯 ID
+    const submitBtn = document.querySelector('.btn-submit');
+            const editId = submitBtn.dataset.editId; // 獲取編輯 ID
+        // 彈出確認視窗，避免誤觸
+    if (editId) {
+           if(!confirm("確定要取消修改嗎？")) return;
+           window.location.href = 'dairyList.html'; // 建議存完後導回明細頁
+        } else {
+            if(!confirm("確定要取消新增嗎？")) return;
+            // 1. 將提交按鈕恢復為新增模式
+               delete submitBtn.dataset.editId;
+                submitBtn.innerText = "🚀 新增報工單";
+            // 2. 隱藏取消按鈕
+              if (cancelBtn) {
+                 cancelBtn.style.display = "none";
+               }
+            // 3. 關鍵：移除網址上的 edit_id 參數，讓頁面狀態變回純新增
+              const url = new URL(window.location);
+              url.searchParams.delete('edit_id');
+              window.history.pushState({}, '', url);
+        }   
+};
+
+
+        // --- 導覽切換 ---
+        const btnForm = document.getElementById('nav-form');
+        const btnList = document.getElementById('nav-list');
+        btnForm.onclick = () => { btnForm.classList.add('active'); btnList.classList.remove('active'); document.getElementById('form-view').style.display = 'grid'; document.getElementById('detail-view').style.display = 'none'; };
+        btnList.onclick = async () => { 
+            btnForm.classList.remove('active'); btnList.classList.add('active'); 
+            document.getElementById('form-view').style.display = 'none'; 
+            document.getElementById('detail-view').style.display = 'block';
+            await fetchTodayReports();
+        };
+
+// 輔助函式：重置表單中的動態增減列
+function resetDynamicFields() {
+    document.getElementById('workItemsContainer').innerHTML = `
+        <div class="dynamic-row">
+            <input type="text" class="work-desc" placeholder="請輸入描述..." style="flex:1;">
+            <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+        </div>`;
+    document.getElementById('laborContainer').innerHTML = `
+        <div class="dynamic-row">
+            <div class="col" style="flex: 1.5;"><input type="text" class="labor-item" placeholder="工人項目"></div>
+            <div class="col"><input type="number" class="labor-count" placeholder="0" step="0.5"></div>
+            <div class="col"><input type="number" class="labor-total" placeholder="0" readonly style="background:#eee;"></div>
+            <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+        </div>`;
+}
+        async function fetchTodayReports() {
+            const { data } = await supabase.from('daily_reports').select('*, report_labor_records(*)').eq('report_date', new Date().toISOString().split('T')[0]).order('created_at', {ascending:false});
+            const listEl = document.getElementById('reportList');
+            if(!data || data.length === 0) { listEl.innerHTML = "今日尚無資料"; return; }
+            listEl.innerHTML = data.map(r => `<div class="report-card"><strong>📍 ${r.project_name} [${r.report_type}]</strong><br><small>${r.category} / ${r.sub_category} (${r.status})</small></div>`).join('');
+        }
+    </script>
+</body>
+</html>

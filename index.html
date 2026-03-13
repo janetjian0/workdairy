@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場報工系統 - 登入</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1e2b3c; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 100%; max-width: 350px; text-align: center; }
+        .logo { font-size: 22px; font-weight: bold; color: #2c3e50; margin-bottom: 30px; }
+        .form-group { text-align: left; margin-bottom: 20px; }
+        label { display: block; font-size: 13px; color: #7f8c8d; margin-bottom: 5px; font-weight: 600; }
+        input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
+        .btn-login { width: 100%; padding: 12px; background: #3498db; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-login:hover { background: #2980b9; }
+        .error-msg { color: #e74c3c; font-size: 13px; margin-top: 15px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="logo">🏗️ 現場報工系統</div>
+        <div class="form-group">
+            <label>員工編號</label>
+            <input type="text" id="staffNo" placeholder="請輸入編號 (如: E001)">
+        </div>
+        <div class="form-group">
+            <label>登入密碼</label>
+            <input type="password" id="password" placeholder="請輸入密碼">
+        </div>
+        <button class="btn-login" onclick="handleLogin()">登入系統</button>
+        <div id="errorMsg" class="error-msg">❌ 編號或密碼錯誤</div>
+    </div>
+
+    <script type="module">
+    import { SUPABASE_CONFIG } from './config.js';
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js';
+    
+    // 初始化 Supabase
+    const SUPABASE_URL = 'https://uvglebltcpfbciqhziqc.supabase.co';
+    const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+
+    // 取得 DOM 元素
+    const loginBtn = document.querySelector('.btn-login');
+    const errorMsg = document.getElementById('errorMsg');
+
+    // 綁定點擊事件
+    loginBtn.addEventListener('click', async () => {
+        const staffNo = document.getElementById('staffNo').value.trim();
+        const password = document.getElementById('password').value;
+
+        // 隱藏之前的錯誤訊息
+        errorMsg.style.display = 'none';
+
+        if (!staffNo || !password) {
+            errorMsg.innerText = "❌ 請輸入編號與密碼";
+            errorMsg.style.display = 'block';
+            return;
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('staff')
+                .select('*')
+                .eq('staff_no', staffNo)
+                .eq('password', password)
+                .single();
+
+            if (error || !data) {
+                console.error("登入失敗:", error);
+                errorMsg.innerText = "❌ 編號或密碼錯誤";
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // 登入成功處理
+            localStorage.setItem('erp_user', JSON.stringify({
+                id: data.id, 
+                no: data.staff_no, 
+                name: data.name, 
+                isManager: data.is_manager
+            }));
+            
+            // 轉跳頁面
+            window.location.href = 'main.html';
+            
+        } catch (err) {
+            console.error("系統異常:", err);
+            errorMsg.innerText = "❌ 系統連線異常，請檢查網路";
+            errorMsg.style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>

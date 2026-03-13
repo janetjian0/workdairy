@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工程進度追蹤甘特圖</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.28.0/dist/date-fns.min.js"></script>
+    <style>
+        :root { --erp-purple: #4a148c; --erp-blue: #3498db; --erp-bg: #f4f7f6; }
+        body { background-color: var(--erp-bg); color: #1e293b; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
+        .header-bar { background-color: #1e2b3c; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 45px; position: sticky; top: 0; z-index: 100; }
+        .chart-container { position: relative; width: 100%; height: 500px; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        .status-pill { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 700; }
+    </style>
+</head>
+<body class="p-0">
+
+    <header class="header-bar">
+        <div class="text-[14px] font-bold">📊 工程進度追蹤甘特圖 (21天週期)</div>
+        <div class="flex gap-2">
+            <a href="main.html" class="px-3 py-1 bg-[#3498db] text-white rounded text-xs no-underline">📝 返回報工</a>
+            <a href="calendar.html" class="px-3 py-1 border border-white text-white rounded text-xs no-underline">📅 行事曆</a>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-xl border border-purple-100">
+            <div>
+                <h1 class="text-xl font-black text-[#4a148c]">日報計畫 vs 實際執行比對</h1>
+                <p class="text-gray-500 text-xs mt-1" id="dateRangeText">分析區間：載入中...</p>
+            </div>
+            <div class="flex items-center gap-6 text-xs font-bold">
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-100 border border-blue-300 rounded-sm"></span> 計畫區間</div>
+                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-[#4a148c] rounded-sm"></span> 實際執行</div>
+                <div class="flex items-center gap-1"><span class="w-3 h-0.5 bg-red-500"></span> 今日基準線</div>
+            </div>
+        </div>
+
+        <section class="card p-6">
+            <div class="chart-container">
+                <canvas id="ganttChart"></canvas>
+            </div>
+        </section>
+
+        <section class="card overflow-hidden">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-widest border-b border-gray-100">
+                    <tr>
+                        <th class="px-6 py-3 font-bold text-[#4a148c]">施工大類 / 作業細項</th>
+                        <th class="px-6 py-3 font-bold">棟別-樓層</th>
+                        <th class="px-6 py-3 font-bold">計劃區間</th>
+                        <th class="px-6 py-3 font-bold">實際區間</th>
+                        <th class="px-6 py-3 font-bold text-center">狀態</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100" id="taskTableBody">
+                    </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script type="module">
+        import { SUPABASE_CONFIG } from './config.js';
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js';
+    
+    // 初始化 Supabase
+    const SUPABASE_URL = 'https://uvglebltcpfbciqhziqc.supabase.co';
+   //     const SUPABASE_KEY = 'sb_publishable_Z8UUFXRIt_KrjHY6eWsPfg_eQ4d7Mkb';
+   //     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    //const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+    const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+
+       // 🚀 設定 21 天（三週）觀察窗口：今天的前 7 天 到 後 14 天
+const today = new Date();
+const startWindow = new Date(); 
+startWindow.setDate(today.getDate() - 7); // 前一週
+
+const endWindow = new Date(); 
+endWindow.setDate(today.getDate() + 14); // 後兩週（加起來共三週）
+
+document.getElementById('dateRangeText').innerText = `分析區間：${startWindow.toLocaleDateString()} ~ ${endWindow.toLocaleDateString()} (共 21 天)`;
+
+        const parseDate = (d) => d ? new Date(d).getTime() : null;
+
+        async function initDashboard() {
+            // 從 Supabase 抓取資料
+            const { data: reports, error } = await supabase
+                .from('daily_reports')
+                .select('*')
+                .order('actual_start_date', { ascending: true });
+
+            if (error) { alert("資料載入失敗"); return; }
+
+            renderChart(reports);
+            renderTable(reports);
+        }
+
+        function renderChart(reports) {
+            const ctx = document.getElementById('ganttChart').getContext('2d');
+            
+            // 標籤顯示：施工大類 + 位置
+            const labels = reports.map(r => `${r.category} (${r.buildings?.[0] || ''}-${r.floors?.[0] || ''})`);
+            
+            const plannedData = reports.map(r => [parseDate(r.plan_start_date), parseDate(r.plan_end_date)]);
+            const actualData = reports.map(r => r.actual_start_date ? [parseDate(r.actual_start_date), parseDate(r.actual_end_date)] : null);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '計畫區間',
+                            data: plannedData,
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderColor: 'rgba(52, 152, 219, 0.3)',
+                            borderWidth: 1,
+                            barPercentage: 0.4
+                        },
+                        {
+                            label: '實際執行',
+                            data: actualData,
+                            backgroundColor: '#4a148c',
+                            borderColor: '#4a148c',
+                            borderWidth: 1,
+                            barPercentage: 0.8
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    // ... 在 Chart 實例的 options 內 ...
+scales: {
+    x: {
+        type: 'linear',
+        min: startWindow.getTime(), // 強制從前一週開始
+        max: endWindow.getTime(),   // 強制到後兩週結束
+        ticks: {
+            stepSize: 86400000, // 每一天一個刻度 (毫秒)
+            callback: value => {
+                const d = new Date(value);
+                return (d.getMonth() + 1) + '/' + d.getDate();
+            },
+            font: { size: 10 }
+        },
+        grid: {
+            color: '#f0f0f0'
+        }
+    }
+}
+                },
+                plugins: [{
+                    id: 'todayLine',
+                    afterDraw: (chart) => {
+                        const todayX = chart.scales.x.getPixelForValue(today.getTime());
+                        const { ctx, chartArea: { top, bottom } } = chart;
+                        ctx.save(); ctx.beginPath(); ctx.strokeStyle = 'red'; ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]); ctx.moveTo(todayX, top); ctx.lineTo(todayX, bottom);
+                        ctx.stroke(); ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        function renderTable(reports) {
+            const tbody = document.getElementById('taskTableBody');
+            tbody.innerHTML = reports.map(r => `
+                <tr class="hover:bg-gray-50 border-b border-gray-50">
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-gray-800">${r.category}</div>
+                        <div class="text-[11px] text-gray-500">${r.sub_category}</div>
+                    </td>
+                    <td class="px-6 py-4 font-bold text-purple-700">${r.buildings?.join('') || ''}-${r.floors?.join('') || ''}</td>
+                    <td class="px-6 py-4 text-[11px] text-gray-400 font-mono">${r.plan_start_date || '--'} ~ ${r.plan_end_date || '--'}</td>
+                    <td class="px-6 py-4 text-[11px] text-[#4a148c] font-bold font-mono">${r.actual_start_date || '未開始'} ~ ${r.actual_end_date || '--'}</td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="status-pill ${r.status === '完成' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}">${r.status}</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        window.onload = initDashboard;
+    </script>
+</body>
+</html>

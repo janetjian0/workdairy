@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>報工系統 - 系統後台設定</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; font-size: 13px; }
+        .header-bar { background-color: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; height: 45px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-title { font-size: 14px; font-weight: bold; }
+        .back-btn { color: white; text-decoration: none; font-weight: bold; font-size: 11px; border: 1px solid white; padding: 5px 12px; border-radius: 4px; transition: 0.3s; }
+        .back-btn:hover { background: white; color: #2c3e50; }
+
+        .main-wrapper { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+        
+        /* 頁籤樣式 */
+        .tabs { display: flex; gap: 5px; }
+        .tab { padding: 10px 20px; background: #edeff0; border: 1px solid #dcdde1; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; font-weight: bold; color: #7f8c8d; }
+        .tab.active { background: white; color: #3498db; border-top: 3px solid #3498db; padding-top: 8px; }
+
+        .panel { background: white; border-radius: 0 6px 6px 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid #dcdde1; padding: 25px; min-height: 450px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        label.section-title { font-weight: bold; color: #2c3e50; font-size: 15px; display: block; margin-bottom: 20px; border-left: 4px solid #3498db; padding-left: 12px; }
+        
+        .form-box { background: #f9f9f9; padding: 18px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 25px; }
+        .row { display: flex; gap: 12px; margin-bottom: 15px; align-items: flex-end; }
+        .col { flex: 1; }
+        .col label { display: block; font-size: 11px; color: #7f8c8d; margin-bottom: 5px; font-weight: bold; }
+        
+        input, select, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+
+        .btn-save { background: #3498db; color: white; border: none; padding: 9px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-save:hover { background: #2980b9; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: left; }
+        th { background: #f8f9fa; color: #2c3e50; font-size: 12px; }
+        .btn-del { background: #ff7675; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+        .btn-del:hover { background: #d63031; }
+
+        .badge-mgr { background: #ffeaa7; color: #d35400; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <header class="header-bar">
+        <div class="header-title">⚙️ 報工系統管理後台</div>
+        <a href="main.html" class="back-btn">⬅ 返回報工頁面</a>
+    </header>
+
+    <div class="main-wrapper">
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(event, 'tab-projects')">專案管理</div>
+            <div class="tab" onclick="switchTab(event, 'tab-staff')">員工帳號</div>
+            <div class="tab" onclick="switchTab(event, 'tab-construction')">施工項目</div>
+            <div class="tab" onclick="switchTab(event, 'tab-location')">施工位置</div>
+        </div>
+
+        <div class="panel">
+            <div id="tab-projects" class="tab-content active">
+                <label class="section-title">案場專案設定</label>
+                <div class="form-box">
+                    <div class="row">
+                        <div class="col"><label>專案編號</label><input type="text" id="pNo" placeholder="PJ-001"></div>
+                        <div class="col"><label>專案名稱</label><input type="text" id="pName" placeholder="案場名稱"></div>
+                        <div class="col"><label>負責人</label><input type="text" id="pManager" placeholder="姓名"></div>
+                        <button class="btn-save" onclick="saveProject()">💾 儲存專案</button>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr><th>編號</th><th>專案名稱</th><th>負責人</th><th>操作</th></tr></thead>
+                    <tbody id="pList"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-staff" class="tab-content">
+                <label class="section-title">員工帳號與權限</label>
+                <input type="hidden" id="sId">
+                <div class="form-box">
+                    <div class="row">
+                        <div class="col"><label>員工編號 (帳號)</label><input type="text" id="sNo" placeholder="E001"></div>
+                        <div class="col"><label>姓名</label><input type="text" id="sName" placeholder="姓名"></div>
+                        <div class="col"><label>登入密碼</label><input type="password" id="sPwd" placeholder="請設定密碼"></div>
+                    </div>
+                    <div class="row">
+                        <div class="col"><label>職稱</label><input type="text" id="sTitle" placeholder="如: 主任"></div>
+                        <div class="col" style="flex: 0.5; display: flex; align-items: center; gap: 8px; padding-bottom: 5px;">
+                            <input type="checkbox" id="sIsManager" style="width:18px; height:18px;">
+                            <label style="margin:0; cursor:pointer;" for="sIsManager">主管權限</label>
+                        </div>
+                        <button id="btn-staff-save" class="btn-save" onclick="saveStaff()">💾 新增帳號</button>    
+                        <button id="btn-staff-cancel" class="btn-del" style="display:none; height:36px; margin-left:5px;" onclick="resetStaffForm()">取消修改</button>
+                    </div>
+                </div>
+                <table>
+                    <thead><tr><th>編號</th><th>姓名</th><th>職稱</th><th>權限</th><th>操作</th></tr></thead>
+                    <tbody id="sList"></tbody>
+                </table>
+            </div>
+            <div id="tab-construction" class="tab-content">
+    <label class="section-title">施工類別與細項定義</label>
+    <div class="form-box">
+        <input type="hidden" id="cId"> 
+        <div class="row">
+            <div class="col" style="flex: 0.5;"><label>大類編號</label><input type="text" id="cParentNo" placeholder="如: 01"></div>
+            <div class="col"><label>施工大類</label><input type="text" id="cParent" placeholder="如: 泥作工程"></div>
+            <div class="col" style="flex: 0.5;"><label>作業編號</label><input type="text" id="cSubNo" placeholder="如: 01"></div>
+            <div class="col"><label>作業細項</label><input type="text" id="cSub" placeholder="如: 牆面打毛"></div>
+            
+            <div class="col" style="flex: 1.2; display: flex; gap: 8px;">
+                <button id="btn-con-save" class="btn-save" style="flex: 1; white-space: nowrap;" onclick="saveConstructionItem()">💾 新增項目</button>
+                <button id="btn-con-cancel" class="btn-del" style="display:none; flex: 1; height:36px; white-space: nowrap;" onclick="resetConForm()">取消</button>
+            </div>
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th width="80">大類編號</th>
+                <th>施工大類</th>
+                <th width="80">作業編號</th>
+                <th>作業細項</th>
+                <th width="80">狀態</th>
+                <th width="120">操作</th>
+            </tr>
+        </thead>
+        <tbody id="cList"></tbody>
+    </table>
+</div>
+            <div id="tab-location" class="tab-content">
+                <label class="section-title">棟別與樓層定義</label>
+                <div class="row">
+                    <div class="col">
+                        <label>棟別清單 (每行一個，例如: A棟)</label>
+                        <textarea id="bListText" rows="12" placeholder="A棟&#10;B棟"></textarea>
+                    </div>
+                    <div class="col">
+                        <label>樓層清單 (每行一個，例如: 1F)</label>
+                        <textarea id="fListText" rows="12" placeholder="B1&#10;1F&#10;2F"></textarea>
+                    </div>
+                </div>
+                <button class="btn-save" style="width: 100%;" onclick="saveLocations()">💾 儲存位置參數設定</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 1. 【極重要】保護邏輯：必須放在最頂端
+        const userJson = localStorage.getItem('erp_user');
+        const currentUser = userJson ? JSON.parse(userJson) : null;
+
+       /* if (!currentUser || !currentUser.isManager) {
+            alert("權限不足，僅限主管進入！");
+            window.location.href = 'main.html';
+            throw new Error("Unauthorized"); 
+        }*/
+
+
+        // 2. 載入 SDK
+        //import { SUPABASE_CONFIG } from './config.js'; // 1. 引入設定
+        import { SUPABASE_CONFIG } from './config.js';
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js';
+    
+    // 初始化 Supabase
+    const SUPABASE_URL = 'https://uvglebltcpfbciqhziqc.supabase.co';
+   //     const SUPABASE_KEY = 'sb_publishable_Z8UUFXRIt_KrjHY6eWsPfg_eQ4d7Mkb';
+   //     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    //const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+    const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.KEY);
+
+        window.onload = () => {
+            loadProjects();
+            loadStaff();
+            loadConstructionItems();// 🚀 補上這行，明細才會顯示
+            loadLocations();
+        };
+
+        // 將原本的 window.switchTab 修改（或確保它是掛在 window 下）
+window.switchTab = (e, tabId) => {
+    // 移除所有標籤的 active 狀態
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    // 隱藏所有內容面板
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    // 為點擊的標籤加上 active
+    e.currentTarget.classList.add('active');
+    // 顯示對應的內容面板
+    document.getElementById(tabId).classList.add('active');
+};
+        // --- 專案功能 ---
+        async function loadProjects() {
+            const { data } = await supabase.from('projects').select('*').order('project_no');
+            const list = document.getElementById('pList');
+            if(data) {
+                list.innerHTML = data.map(p => `
+                    <tr><td>${p.project_no}</td><td>${p.project_name}</td><td>${p.manager_name || '-'}</td>
+                    <td><button class="btn-del" onclick="delData('projects', '${p.id}')">刪除</button></td></tr>
+                `).join('');
+            }
+        }
+
+        window.saveProject = async () => {
+            const proj = { 
+                project_no: document.getElementById('pNo').value.trim(), 
+                project_name: document.getElementById('pName').value.trim(), 
+                manager_name: document.getElementById('pManager').value.trim() 
+            };
+            if(!proj.project_no || !proj.project_name) return alert("請填寫編號與名稱");
+            const { error } = await supabase.from('projects').insert([proj]);
+            if(error) alert("錯誤: " + error.message); else location.reload();
+        };
+
+        // --- 員工功能 ---
+        async function loadStaff() {
+    const { data } = await supabase.from('staff').select('*').order('staff_no');
+    const list = document.getElementById('sList');
+    if(data) {
+        list.innerHTML = data.map(s => `
+            <tr>
+                <td>${s.staff_no}</td>
+                <td>${s.name}</td>
+                <td>${s.title || '-'}</td>
+                <td>${s.is_manager ? '<span class="badge-mgr">主管</span>' : '一般'}</td>
+                <td>
+                    <button class="btn-save" style="padding:4px 8px; font-size:11px;" 
+                        onclick='editStaff(${JSON.stringify(s)})'>修改</button>
+                    <button class="btn-del" onclick="delData('staff', '${s.id}')">刪除</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+window.editStaff = (data) => {
+    document.getElementById('sId').value = data.id;
+    document.getElementById('sNo').value = data.staff_no;
+    document.getElementById('sName').value = data.name;
+    document.getElementById('sPwd').value = ""; // 密碼通常不回填
+    document.getElementById('sTitle').value = data.title || "";
+    document.getElementById('sIsManager').checked = data.is_manager;
+    
+    // 切換按鈕 UI
+    document.getElementById('btn-staff-save').innerText = "Update 儲存修改";
+    document.getElementById('btn-staff-cancel').style.display = "inline-block";
+    document.getElementById('pwdLabel').innerText = "登入密碼 (留空則不修改)";
+};
+
+window.resetStaffForm = () => {
+    // 1. 清除隱藏的 ID
+    document.getElementById('sId').value = "";
+    
+    // 2. 清空所有輸入框 (使用紫色背景設定)
+    document.getElementById('sNo').value = "";
+    document.getElementById('sName').value = "";
+    document.getElementById('sPwd').value = "";
+    document.getElementById('sTitle').value = "";
+    document.getElementById('sIsManager').checked = false;
+    
+    // 3. 恢復按鈕 UI 狀態
+    const saveBtn = document.getElementById('btn-staff-save');
+    if (saveBtn) {
+        saveBtn.innerText = "💾 新增帳號";
+        saveBtn.style.backgroundColor = "#3498db"; // 恢復原本的藍色
+    }
+    
+    const cancelBtn = document.getElementById('btn-staff-cancel');
+    if (cancelBtn) {
+        cancelBtn.style.display = "none"; // 隱藏取消按鈕
+    }
+
+    document.getElementById('pwdLabel').innerText = "登入密碼";
+};
+window.editConstruction = (data) => {
+    document.getElementById('cId').value = data.id;
+    document.getElementById('cParentNo').value = data.parent_no || "";
+    document.getElementById('cParent').value = data.parent_category;
+    document.getElementById('cSubNo').value = data.sub_no || "";
+    document.getElementById('cSub').value = data.sub_category;
+    
+    document.getElementById('btn-con-save').innerText = "🆙 更新項目";
+    document.getElementById('btn-con-cancel').style.display = "inline-block";
+};
+
+window.resetConForm = () => {
+    document.getElementById('cId').value = "";
+    document.getElementById('cParentNo').value = "";
+    document.getElementById('cParent').value = "";
+    document.getElementById('cSubNo').value = "";
+    document.getElementById('cSub').value = "";
+    
+    document.getElementById('btn-con-save').innerText = "💾 新增項目";
+    document.getElementById('btn-con-cancel').style.display = "none";
+};
+
+window.saveStaff = async () => {
+    const id = document.getElementById('sId').value;
+    const staff = { 
+        staff_no: document.getElementById('sNo').value.trim(),
+        name: document.getElementById('sName').value.trim(), 
+        title: document.getElementById('sTitle').value.trim(),
+        is_manager: document.getElementById('sIsManager').checked 
+    };
+    
+    const pwd = document.getElementById('sPwd').value;
+    if (pwd) staff.password = pwd; // 只有有輸入密碼時才更新密碼
+
+    if(!staff.staff_no || !staff.name) return alert("帳號、姓名必填");
+
+    let result;
+    if (id) {
+        // 修改模式
+        result = await supabase.from('staff').update(staff).eq('id', id);
+    } else {
+        // 新增模式
+        if (!pwd) return alert("新增帳號必須設定密碼");
+        result = await supabase.from('staff').insert([staff]);
+    }
+
+    if(result.error) alert("錯誤: " + result.error.message); 
+    else {
+        alert(id ? "修改成功！" : "新增成功！");
+       // --- 關鍵修正：不使用 location.reload() ---
+        
+        // 1. 重新抓取員工列表 (更新下方的表格)
+        await loadStaff(); 
+        
+        // 2. 清空輸入欄位並恢復「新增」按鈕狀態
+        window.resetStaffForm(); // 🚀 關鍵：儲存後立即回到新增狀態
+    }
+};
+
+
+// 在 window.onload 中加入 loadConstructionItems();
+// 載入施工項目
+async function loadConstructionItems() {
+    // 🚀 修改排序：先排大類編號，再排作業編號
+    const { data } = await supabase.from('construction_categories')
+        .select('*')
+        .order('parent_no', { ascending: true })
+        .order('sub_no', { ascending: true });
+
+    const list = document.getElementById('cList');
+    if(data) {
+        list.innerHTML = data.map(item => `
+            <tr>
+                <td>${item.parent_no || '-'}</td>
+                <td>${item.parent_category}</td>
+                <td>${item.sub_no || '-'}</td>
+                <td>${item.sub_category}</td>
+                <td>${item.is_active ? '使用中' : '停用'}</td>
+                <td>
+                    <button class="btn-save" style="padding:4px 8px; font-size:11px;" onclick='editConstruction(${JSON.stringify(item)})'>修改</button>
+                    <button class="btn-del" onclick="delData('construction_categories', '${item.id}')">刪除</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+// 儲存施工項目
+window.saveConstructionItem = async () => {
+    const id = document.getElementById('cId').value;
+    const payload = { 
+        parent_no: document.getElementById('cParentNo').value.trim(),
+        parent_category: document.getElementById('cParent').value.trim(), 
+        sub_no: document.getElementById('cSubNo').value.trim(),
+        sub_category: document.getElementById('cSub').value.trim(),
+        is_active: true
+    };
+    
+    if(!payload.parent_category || !payload.sub_category) return alert("大類與細項名稱為必填");
+
+    let error;
+    if (id) {
+        const result = await supabase.from('construction_categories').update(payload).eq('id', id);
+        error = result.error;
+    } else {
+        const result = await supabase.from('construction_categories').insert([payload]);
+        error = result.error;
+    }
+
+    if(error) alert("執行失敗: " + error.message);
+    else {
+        alert(id ? "項目更新成功！" : "新增成功！");
+        await loadConstructionItems();
+        resetConForm();
+    }
+};
+
+        // --- 位置功能 ---
+        async function loadLocations() {
+            const { data } = await supabase.from('system_configs').select('*').eq('config_key', 'location_settings').single();
+            if(data) {
+                document.getElementById('bListText').value = data.config_value.buildings.join('\n');
+                document.getElementById('fListText').value = data.config_value.floors.join('\n');
+            }
+        }
+
+        window.saveLocations = async () => {
+            const buildings = document.getElementById('bListText').value.split('\n').map(s => s.trim()).filter(s => s);
+            const floors = document.getElementById('fListText').value.split('\n').map(s => s.trim()).filter(s => s);
+            const { error } = await supabase.from('system_configs').upsert({
+                config_key: 'location_settings',
+                config_value: { buildings, floors }
+            });
+            if(error) alert("錯誤: " + error.message); else alert("位置設定儲存成功！");
+        };
+
+        window.delData = async (table, id) => {
+        if(!confirm("確定要刪除嗎？")) return;
+           const { error } = await supabase.from(table).delete().eq('id', id);
+    
+        if(error) {
+           alert("錯誤: " + error.message);
+        } else {
+           alert("刪除成功！");
+           // 根據刪除的類型重新讀取資料，而不是 reload
+           if (table === 'staff') {
+               await loadStaff();
+               // 🚀 關鍵：檢查如果正在刪除的就是目前編輯中的 ID，則重置表單
+              const currentEditingId = document.getElementById('sId').value;
+              if (currentEditingId === id || !currentEditingId) {
+                  window.resetStaffForm();
+               }
+           } else if (table === 'projects') {
+               await loadProjects();
+           } else if (table === 'construction_categories') { // 🚀 補上這段
+             await loadConstructionItems();
+           }
+       }
+};
+    </script>
+</body>
+</html>
