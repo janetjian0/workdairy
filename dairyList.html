@@ -84,6 +84,7 @@
         
         .col-date { color: black; font-size: 13px; } 
         .col-status { color: #B22222; font-weight: bold; font-size: 13px; }
+        .col-liststatus { color: black; font-weight: normal; font-size: 12px; }
         .labor-item { font-size: 13px; color: black; background: #fff; padding: 2px 4px; border-radius: 3px; border: 1px solid #eee; margin-bottom: 2px; }
 
         .no-data { text-align: center; padding: 50px; color: #95a5a6; background: white; border-radius: 8px; }
@@ -99,6 +100,13 @@
 }
 .btn-edit:hover { background-color: #2980b9; }
 .btn-delete:hover { background-color: #c0392b; }
+button:disabled {
+    background-color: #dcdde1 !important;
+    color: #a0a0a0 !important;
+    cursor: not-allowed !important;
+    border: 1px solid #d2d2d2 !important;
+}
+status-20 { background: #c8e6c9; color: #2e7d32; } /* 完成 - 綠 */
 
 /* 確保表格第一欄寬度足夠 */
 /* 已調整至最後一欄 */
@@ -203,6 +211,8 @@ th:first-child, td:first-child {
             transition: 0.2s; 
         }
         .btn-export:hover { background: #219150; }
+
+       
     </style>
 
 </head>
@@ -231,11 +241,33 @@ th:first-child, td:first-child {
     </div>
     <button class="btn-query" onclick="fetchReports()">🔍 執行查詢</button>
     <button class="btn-export" onclick="exportToExcel()">📊 匯出 Excel</button>
+    <button id="btnSubmitReview" onclick="openSubmitModal()" style="background: #8e44ad; color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-left: 5px;">📤 送審</button>
     </div>
-
+    <div id="submitModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+    <div style="background:white; padding:20px; border-radius:8px; width:320px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
+        <h3 style="margin-top:0;">確認送審資訊</h3>
+        <hr>
+        <div style="margin-bottom:15px;">
+            <label style="display:block; font-weight:bold; margin-bottom:5px;">報工日期：</label>
+            <input type="date" id="modalDate" style="width:90%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+        </div>
+        <div style="margin-bottom:15px;">
+            <label style="display:block; font-weight:bold; margin-bottom:5px;">工務人員：</label>
+            <input type="text" id="modalStaff" readonly style="width:90%; padding:8px; border:1px solid #eee; background:#f9f9f9; border-radius:4px;">
+        </div>
+        <div style="margin-bottom:20px;">
+            <label style="display:block; font-weight:bold; margin-bottom:5px;">專案名稱：</label>
+            <input type="text" id="modalProject" readonly style="width:90%; padding:8px; border:1px solid #eee; background:#f9f9f9; border-radius:4px;">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="closeSubmitModal()" style="padding:8px 15px; background:#bdc3c7; border:none; border-radius:4px; cursor:pointer;">取消</button>
+            <button onclick="confirmSubmitReview()" style="padding:8px 15px; background:#8e44ad; color:white; border:none; border-radius:4px; cursor:pointer;">確認送審</button>
+        </div>
+    </div>
+</div>
     <div id="reportContainer">
         </div>
-</div>
+   </div>
     <script type="module">
         import { SUPABASE_CONFIG } from './config.js';
     import { createClient } from 'https://esm.sh/@supabase/supabase-js';
@@ -256,7 +288,71 @@ th:first-child, td:first-child {
         document.getElementById('endDate').value = today;
 
        
+// 🚀 開啟送審彈窗
+window.openSubmitModal = () => {
+    const startDate = document.getElementById('startDate').value;
+    const staff = document.getElementById('staffFilter').value;
+    
+    // 檢查是否已篩選人員與單一日期
+    if (!staff) return alert("請先篩選「工務人員」再進行送審");
+    
+    // 取得當前顯示的第一筆資料的專案名稱 (假設查詢結果為同一專案)
+    const projectName = currentData.length > 0 ? currentData[0].project_name : "未偵測到專案";
 
+    document.getElementById('modalDate').value = startDate;
+    document.getElementById('modalStaff').value = staff;
+    document.getElementById('modalProject').value = projectName;
+    
+    document.getElementById('submitModal').style.display = 'flex';
+};
+
+// 🚀 關閉彈窗
+window.closeSubmitModal = () => {
+    document.getElementById('submitModal').style.display = 'none';
+};
+
+// 🚀 執行資料庫更新：將狀態改為「送審」
+window.confirmSubmitReview = async () => {
+    const targetDate = document.getElementById('modalDate').value;
+    const staff = document.getElementById('modalStaff').value;
+    const project = document.getElementById('modalProject').value;
+
+    //if (!confirm(`確定要將 ${targetDate} ${staff} 的報工紀錄更改為「送審」狀態嗎？`)) return;
+
+    try {
+        // 1. 🔍 防呆檢查：計算該條件下「非審核完成」的資料筆數
+        // 排除 listStatus = '20' (完成)
+        const { count, error: countError } = await supabase
+            .from('daily_reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('report_date', targetDate)
+            .eq('staff_name', staff)
+            .eq('project_name', project)
+            .neq('liststatus', '20完成'); // 這裡檢查是否還有非「審核完成」的資料
+
+        if (countError) throw countError;
+
+        // 🚀 關鍵邏輯：如果可送審筆數為 0，則中斷執行
+        if (count === 0) {
+            return alert(`❌ 無法送審：\n${targetDate} 的資料已全部「20完成」或查無可送審資料。`);
+}
+        const { data, error } = await supabase
+            .from('daily_reports')
+            .update({ liststatus: '10送審' }) // 更新狀態為送審
+            .eq('report_date', targetDate)
+            .eq('staff_name', staff)
+            .eq('project_name', project);
+
+        if (error) throw error;
+
+        alert(`✅ ${targetDate} 報工資料已成功送審`);
+        closeSubmitModal();
+        fetchReports(); // 重新整理列表，更新畫面上的狀態標記
+        
+    } catch (err) {
+        alert("送審失敗: " + err.message);
+    }
+};
         window.onload = async () => {
              // 🚀 取得登入者姓名 (從 URL 參數 user 取得)
             //const urlParams = new URLSearchParams(window.location.search);
@@ -348,6 +444,7 @@ async function setDefaultDateToLastReport(staffName) {
             const staff = document.getElementById('staffFilter').value; // 取得工務人員篩選值
             const container = document.getElementById('reportContainer');
             
+            
             if (!start || !end) return alert("請選擇完整日期區間");
 
             try {
@@ -403,7 +500,10 @@ async function setDefaultDateToLastReport(staffName) {
 
                         const buildings = d.buildings?.join(',') || '-';
                         const floors = d.floors?.join(',') || '-';
-
+                        const currentstatus = d.liststatus || "00";
+                        // 🚀 關鍵判斷：如果狀態是 '20' (審核完成)，則設為 disabled
+                       const isLocked = (currentstatus.toString().substring(0, 2) === '20');
+                       const disabledAttr = isLocked ? 'disabled' : '';
                         return `
                         <tr>
                             <td style="width:30px; text-align:center;">
@@ -429,10 +529,16 @@ async function setDefaultDateToLastReport(staffName) {
                             </td>
                             <td>${laborHtml}</td>
                             <td class="col-status">${d.status}</td>
+                            <td class="col-liststatus">${d.liststatus}</td>
                             <td>
-                                <button class="btn-edit" onclick="editReport('${d.id}')">修</button>
-                                <button class="btn-delete" onclick="deleteReport('${d.id}')">刪</button>
-                            </td>
+                            <button class="btn-edit" 
+                                    onclick="editReport('${d.id}')" 
+                                    ${disabledAttr}>修改</button>
+                            <button class="btn-delete" 
+                                    onclick="deleteReport('${d.id}')" 
+                                    ${disabledAttr} 
+                                    style="${isLocked ? '' : 'background:#e74c3c;'}">刪除</button>
+                           </td>
                         </tr>`;
                         
                     }).join('');
@@ -463,7 +569,8 @@ async function setDefaultDateToLastReport(staffName) {
                                     <th width="160">施工時程 (計/實)</th>
                                     <th width="180">出工明細</th>
                                     <th width="60">狀態</th>
-                                    <th width="100">編修</th>
+                                    <th width="60">簽呈</th>
+                                    <th width="80">編修</th>
                                 </tr>
                             </thead>
                             <tbody id="group-body-${index}">${detailRows}</tbody>
@@ -605,7 +712,8 @@ window.getSelectedIds = () => {
                 "計劃日期": `${d.plan_start_date} ~ ${d.plan_end_date}`,
                 "實際日期": `${d.actual_start_date} ~ ${d.actual_end_date}`,
                 "出工明細": d.report_labor_records.map(l => `${l.item_name}:${l.today_count}人`).join('\n'),
-                "狀態": d.status
+                "狀態": d.status,
+                "簽呈": d.liststatus
             }));
 
             // 2. 建立工作表

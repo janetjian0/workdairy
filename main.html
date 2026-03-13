@@ -202,6 +202,7 @@
             <div class="panel-wrapper">
                 <div class="form-group">
                     <label class="title">📋 基本資訊</label>
+                    <input type="hidden" id="reportId">
                     <div class="row">
                         <div class="col" style="flex: 1.5;"><label>專案名稱</label><select id="projectName"><option value="">載入專案中...</option></select></div>                        
                         <div class="col"><label>工務人員</label><select id="staffName"><option value="">載入中...</option></select></div>
@@ -367,6 +368,29 @@
             window.location.replace('index.html'); 
         }
          };
+// 🚀 開啟送審彈窗
+window.openSubmitModal = () => {
+    const startDate = document.getElementById('startDate').value;
+    const staff = document.getElementById('staffFilter').value;
+    
+    // 檢查是否已篩選人員與單一日期
+    if (!staff) return alert("請先篩選「工務人員」再進行送審");
+    
+    // 取得當前顯示的第一筆資料的專案名稱 (假設查詢結果為同一專案)
+    const projectName = currentData.length > 0 ? currentData[0].project_name : "未偵測到專案";
+
+    document.getElementById('modalDate').value = startDate;
+    document.getElementById('modalStaff').value = staff;
+    document.getElementById('modalProject').value = projectName;
+    
+    document.getElementById('submitModal').style.display = 'flex';
+};
+
+// 🚀 關閉彈窗
+window.closeSubmitModal = () => {
+    document.getElementById('submitModal').style.display = 'none';
+};
+
 
         // 在 initApp 函式中加入 edit_id 的判斷
 async function initApp() {
@@ -381,7 +405,12 @@ async function initApp() {
     const urlParams = new URLSearchParams(window.location.search);
     const editId = urlParams.get('edit_id');
     if (editId) {
+        
+        console.log("🛠️ 偵測到修改模式，ID:", editId);
+        // 如果 ID 後面帶有冒號或奇怪數字，清除它
+        //const cleanId = editId.split(':')[0]; 
         await loadExistingReport(editId);
+        
     }
 }
         // --- 功能函式 ---
@@ -400,12 +429,23 @@ async function initApp() {
             document.getElementById('workItemsContainer').appendChild(div);
         };
 
-        window.addLaborRecord = () => {
-            const div = document.createElement('div'); div.className = 'dynamic-row';
-            div.innerHTML = `<div class="col" style="flex: 1.5;"><input type="text" class="labor-item"></div><div class="col"><input type="number" class="labor-count"></div><div class="col"><div class="col"><input type="number" class="labor-total"></div></div><button class="btn-remove" onclick="this.parentElement.remove()">✖</button>`;
-            document.getElementById('laborContainer').appendChild(div);
-        };
-
+window.addLaborRecord = (itemName = '', todayCount = '', totalCount = '') => {
+    const div = document.createElement('div'); 
+    div.className = 'dynamic-row';
+    div.innerHTML = `
+        <div class="col" style="flex: 1.5;">
+            <input type="text" class="labor-item" value="${itemName}" placeholder="工人項目">
+        </div>
+        <div class="col">
+            <input type="number" class="labor-count" value="${todayCount}" placeholder="0" step="0.5">
+        </div>
+        <div class="col">
+            <input type="number" class="labor-total" value="${totalCount}" placeholder="0" step="0.5">
+        </div>
+        <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+    `;
+    document.getElementById('laborContainer').appendChild(div);
+};
         // --- 資料載入 ---
         async function loadProjectDropdown() {
             const { data } = await supabase.from('projects').select('project_no, project_name');
@@ -414,6 +454,66 @@ async function initApp() {
 
         // 🚀 全域變數存放原始資料以便查詢編號
 let allCategories = [];
+
+// 在 main.html 的 script type="module" 內
+async function loadProjects() {
+    try {
+        const { data, error } = await supabase
+            .from('projects') // 確保您的專案資料表名稱正確
+            .select('project_name')
+            .order('project_name');
+
+        if (error) throw error;
+
+        const select = document.getElementById('projectName');
+        // 清空並加入預設選項
+        select.innerHTML = '<option value="">請選擇專案</option>';
+        data.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.project_name;
+            opt.textContent = p.project_name;
+            select.appendChild(opt);
+        });
+        console.log("✅ 專案清單載入成功");
+    } catch (err) {
+        console.error("❌ 無法載入專案清單:", err.message);
+    }
+}
+
+// 🚀 關鍵：將函式掛載到 window，否則 HTML 找不到它
+window.loadProjects = loadProjects;
+
+// main.html 內
+async function loadStaff() {
+    try {
+        // 假設您的員工資料在 staff 資料表，或直接從 daily_reports 抓取不重複名單
+        const { data, error } = await supabase
+            .from('daily_reports') // 或者從專門的員工表抓取
+            .select('staff_name')
+            .not('staff_name', 'is', null);
+
+        if (error) throw error;
+
+        // 去除重複名稱
+        const uniqueStaff = [...new Set(data.map(item => item.staff_name))];
+
+        const select = document.getElementById('staffName');
+        select.innerHTML = '<option value="">請選擇人員</option>';
+        
+        uniqueStaff.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+        });
+        console.log("✅ 人員清單載入成功");
+    } catch (err) {
+        console.error("❌ 無法載入人員清單:", err.message);
+    }
+}
+
+// 🚀 關鍵：掛載到全域
+window.loadStaff = loadStaff;
 
 async function loadCategories() {
     const { data } = await supabase.from('construction_categories')
@@ -534,14 +634,12 @@ async function loadExistingReport(reportId) {
             .single();
 
         if (error) throw error;
-
         if (report) {
             // 3. 回填基本資訊欄位
-            document.getElementById('reportId').value = report.id;
+            document.getElementById('reportId').value = report.id;   
             document.getElementById('projectName').value = report.project_name;
             document.getElementById('staffName').value = report.staff_name;
             document.getElementById('reportDate').value = report.report_date;
-
             // 4. 🚀 修正 ID：將原本錯誤的 mainCategory 改為與 HTML 一致的 category
             const catEl = document.getElementById('category');
             if (catEl) {
@@ -561,29 +659,45 @@ async function loadExistingReport(reportId) {
                         document.getElementById('subNo').value = report.sub_no || '';
                 }, 100);
             }
-
             // 6. 回填日報類別按鈕狀態 (現場/內業/缺失)
             document.querySelectorAll('.type-group .toggle-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.innerText === report.report_type);
             });
+            // 7. 回填棟別 (Checkbox 勾選)
+if (report.buildings && Array.isArray(report.buildings)) {
+    document.querySelectorAll('input[name="building"]').forEach(checkbox => {
+        checkbox.checked = report.buildings.includes(checkbox.value);
+    });
+}
 
-            // 7. 回填棟別與樓層 (多選項目)
-            document.querySelectorAll('.location-tag').forEach(tag => {
-                const val = tag.dataset.value;
-                if (report.buildings?.includes(val) || report.floors?.includes(val)) {
-                    tag.classList.add('active');
-                } else {
-                    tag.classList.remove('active');
-                }
-            });
-
+// 7.1 回填樓層 (Checkbox 勾選)
+if (report.floors && Array.isArray(report.floors)) {
+    document.querySelectorAll('input[name="floor"]').forEach(checkbox => {
+        checkbox.checked = report.floors.includes(checkbox.value);
+    });
+}
+console.error("7", error);
             // 8. 回填時程資訊 (計/實 起訖日期)
             document.getElementById('planStartDate').value = report.plan_start_date || '';
+            console.error("8-1", report.plan_start_date);
             document.getElementById('planEndDate').value = report.plan_end_date || '';
+            console.error("8-2", report.plan_end_date);
             document.getElementById('actualStartDate').value = report.actual_start_date || '';
+            console.error("8-3", report.actual_start_date);
             document.getElementById('actualEndDate').value = report.actual_end_date || '';
-            document.getElementById('statusSelect').value = report.status || '進行中';
-
+            console.error("8-4", report.actual_end_date);
+            console.error("8-5", report.status);
+            //document.getElementById('statusSelect').value = report.status || '進行中';
+            if (report.status) {
+                document.querySelectorAll('.status-group .toggle-btn').forEach(btn => {
+                    if (btn.innerText === report.status) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+            }
+console.error("8", error);
             // 9. 回填工作描述項目
             const workContainer = document.getElementById('workItemsContainer');
             workContainer.innerHTML = ''; // 清空原本的預設欄位
@@ -594,18 +708,21 @@ async function loadExistingReport(reportId) {
             } else {
                 addWorkItem(); // 若無資料則顯示一個空白列
             }
-
+console.error("9", error);
             // 10. 回填出工紀錄項目
-            const laborContainer = document.getElementById('laborRecordsContainer');
-            laborContainer.innerHTML = ''; // 清空原本的預設欄位
-            if (report.report_labor_records && report.report_labor_records.length > 0) {
-                report.report_labor_records.forEach(record => {
-                    addLaborRow(record.item_name, record.today_count); // 呼叫原本的 addLaborRow 函式
-                });
-            } else {
-                addLaborRow(); // 若無資料則顯示一個空白列
+            const laborContainer = document.getElementById('laborContainer');
+            if (laborContainer) {
+                laborContainer.innerHTML = ''; // 清空原本的預設欄位
+                if (report.report_labor_records && report.report_labor_records.length > 0) {
+                    report.report_labor_records.forEach(record => {
+                        // 現在 addLaborRecord 可以正確接收並渲染資料了
+                        addLaborRecord(record.item_name, record.today_count, record.total_count); 
+                    });
+                } else {
+                    addLaborRecord(); // 若無資料則顯示一個空白列
+                }
             }
-
+console.error("10", error);
             // 11. 變更提交按鈕為「更新模式」並顯示「取消」按鈕
             const submitBtn = document.querySelector('.btn-submit');
             const cancelBtn = document.getElementById('btn-cancel-edit');
