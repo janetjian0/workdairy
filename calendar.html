@@ -114,8 +114,27 @@
 
             // 抓取包含計劃與實際日期的所有報工
             const { data: reports } = await supabase
-                .from('daily_reports')
-                .select('*, report_work_items(description)');
+    .from('daily_reports')
+    .select(`
+        project_name,
+        staff_name,
+        category,
+        sub_category,
+        buildings,
+        floors,
+        status,
+        report_work_items!inner(
+            description,
+            plan_start_date,
+            plan_end_date,
+            actual_start_date,
+            actual_end_date
+        )
+    `)
+    // 透過 .or 實作 where (plan_start_date is not null or ...)
+    .or('plan_start_date.not.is.null,plan_end_date.not.is.null,actual_start_date.not.is.null,actual_end_date.not.is.null', { 
+        foreignTable: 'report_work_items' 
+    });
 
             // 1. 上個月填充
             for (let i = firstDay; i > 0; i--) {
@@ -123,39 +142,43 @@
             }
 
             // 2. 本月渲染
-            for (let d = 1; d <= lastDate; d++) {
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const targetDate = new Date(dateStr);
-                const isToday = new Date().toISOString().split('T')[0] === dateStr;
-                
-                // 篩選該日期屬於「計劃範圍」或「實際範圍」的資料
-                let dayHtml = "";
+for (let d = 1; d <= lastDate; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const targetDate = new Date(dateStr);
+    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+    
+    let dayHtml = "";
 
-                reports?.forEach(r => {
-                    const planStart = new Date(r.plan_start_date);
-                    const planEnd = new Date(r.plan_end_date);
-                    const actStart = new Date(r.actual_start_date);
-                    const actEnd = new Date(r.actual_end_date);
-                    
-                    const desc = r.report_work_items?.map(wi => wi.description).join('、') || '無描述';
-                    const baseInfo = `${r.category}、${r.sub_category}、${r.buildings?.join('')}${r.floors?.join('')}、${desc}、<b>${r.staff_name}</b>、${r.report_type}`;
+    // 🚀 核心修正：展開嵌套的子表資料
+    reports?.forEach(report => {
+        // 因為使用了 !inner，report_work_items 會是一個陣列
+        report.report_work_items.forEach(item => {
+            const planStart = item.plan_start_date ? new Date(item.plan_start_date) : null;
+            const planEnd = item.plan_end_date ? new Date(item.plan_end_date) : null;
+            const actStart = item.actual_start_date ? new Date(item.actual_start_date) : null;
+            const actEnd = item.actual_end_date ? new Date(item.actual_end_date) : null;
+            
+            // 修正：從子表抓描述，從主表抓其他資訊
+            const desc = item.description || '-';
+            const baseInfo = `[${report.project_name}] ${report.category} / ${report.sub_category} <br> <span class="location-tag">${report.buildings?.join('')}${report.floors?.join('')}</span> <br> ${desc} (<b>${report.staff_name}</b>)`;
 
-                    // 如果在計劃日期內 -> 淺藍色
-                    if (targetDate >= planStart && targetDate <= planEnd) {
-                        dayHtml += `<div class="report-item item-plan" onclick="location.href='dairyList.html?user=${encodeURIComponent(r.staff_name)}&date=${r.report_date}'">${baseInfo}</div>`;
-                    }
-                    // 如果在實際日期內 -> 淺綠色
-                    if (r.actual_start_date && r.actual_end_date && targetDate >= actStart && targetDate <= actEnd) {
-                        dayHtml += `<div class="report-item item-actual" onclick="location.href='dairyList.html?user=${encodeURIComponent(r.staff_name)}&date=${r.report_date}'">${baseInfo}</div>`;
-                    }
-                });
-
-                grid.innerHTML += `
-                    <div class="cal-cell ${isToday ? 'today' : ''}">
-                        <div class="cal-date-num">${d}</div>
-                        ${dayHtml}
-                    </div>`;
+            // 檢查計劃日期範圍
+            if (planStart && planEnd && targetDate >= planStart && targetDate <= planEnd) {
+                dayHtml += `<div class="report-item item-plan">${baseInfo}</div>`;
             }
+            // 檢查實際日期範圍
+            if (actStart && actEnd && targetDate >= actStart && targetDate <= actEnd) {
+                dayHtml += `<div class="report-item item-actual">${baseInfo}</div>`;
+            }
+        });
+    });
+
+    grid.innerHTML += `
+        <div class="cal-cell ${isToday ? 'today' : ''}">
+            <div class="cal-date-num">${d}</div>
+            ${dayHtml}
+        </div>`;
+}
         }
 
         window.changeMonth = (offset) => {

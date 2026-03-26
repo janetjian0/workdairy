@@ -122,21 +122,23 @@ th:last-child, td:last-child {
     min-width: 1200px; /* 保持原有的最小總寬度 */
 }
 
-/* 2. 定義描述欄位的樣式 */
+/* 修改 CSS 確保寬度嚴格限制 */
 .desc-col {
-    width: 150px !important; 
+    width: 250px !important;      /* 增加寬度以容納日期 */
+    min-width: 200px !important;
+    max-width: 300px !important;
     word-wrap: break-word !important; 
     overflow-wrap: break-word !important;
-    white-space: normal !important; /* 允許換行 */
+    white-space: normal !important; 
+    padding: 8px !important;
 }
 
-/* 3. 內層文字容器 */
 .work-item-text {
     display: block;
     width: 100%;
-    color: black;
+    color: #000;
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 CSS
@@ -450,8 +452,18 @@ async function setDefaultDateToLastReport(staffName) {
             try {
 
                 let query = supabase
-                .from('daily_reports')
-                .select(`*, report_work_items(description), report_labor_records(*)`)
+    .from('daily_reports')
+    .select(`
+        *, 
+        report_work_items(
+            description, 
+            plan_start_date, 
+            plan_end_date, 
+            actual_start_date, 
+            actual_end_date
+        ), 
+        report_labor_records(*)
+    `)
                 .gte('report_date', start)
                 .lte('report_date', end);
 
@@ -493,7 +505,33 @@ async function setDefaultDateToLastReport(staffName) {
                 container.innerHTML = Object.values(groupedData).map((group, index) => {
                     
                     const detailRows = group.details.map(d => {
-                        const workDescs = d.report_work_items.map(i => i.description).join('<br>') || '-';
+                        //const workDescs = d.report_work_items.map(i => i.description).join('<br>') || '-';
+                        // 在 fetchReports 函式內的 const detailRows = group.details.map(d => { ... }) 區塊中：
+/*20260325 modify by Janet */
+// 1. 純工作描述 (不含日期)
+/* 20260325 modify by Janet */
+// 1. 純工作描述 (設定至少 2 行高度約 42px)
+const workDescs = d.report_work_items.map(i => `
+    <div style="margin-bottom: 8px; background: #fdfdfd; padding: 4px; border-radius: 4px; border-bottom: 1px solid #eee;">
+        <div class="work-item-text" style="font-weight: 500; min-height: 28px; line-height: 1; display: block;">
+            ${i.description || '-'} 
+        </div>
+    </div>
+`).join('') || '-';
+/*----------------------------------*/
+// 2. 獨立日期資訊 
+const itemDatesHtml = d.report_work_items.map(i => {
+    return `
+        <div style="margin-bottom: 8px; padding: 4px; font-size: 12px; line-height: 1.1; border-bottom: 1px solid #eee;">
+            <div style="color: #673AB7; font-weight: 500;">
+                計: ${i.plan_start_date || '-'} ~ ${i.plan_end_date || '-'}
+            </div>
+            <div style="color: #B22222; font-weight: 500; line-height: 1.1;">
+                實: ${i.actual_start_date || '-'} ~ ${i.actual_end_date || '-'}
+            </div>
+        </div>`;
+}).join('') || '-';
+/*----------------------------------*/
                         const laborHtml = d.report_labor_records.map(l => 
                             `<div class="labor-item">${l.item_name}: ${l.today_count}人 (累計:${l.total_count})</div>`
                         ).join('') || '-';
@@ -523,10 +561,10 @@ async function setDefaultDateToLastReport(staffName) {
                             <td class="desc-col">
                                 <div class="work-item-text">${workDescs}</div>
                             </td>
-                            <td class="col-date">
-                                計: ${d.plan_start_date || '-'} ~ ${d.plan_end_date || '-'} <br>
-                                實: ${d.actual_start_date || '-'} ~ ${d.actual_end_date || '-'}
+                            <td class="col-date" style="min-width: 180px; vertical-align: top;">
+                               ${itemDatesHtml}
                             </td>
+
                             <td>${laborHtml}</td>
                             <td class="col-status">${d.status}</td>
                             <td class="col-liststatus">${d.liststatus}</td>
@@ -623,7 +661,14 @@ window.batchCopyReport = async (oldDate, staff, project, index) => {
             // 插入子表：工作描述
             if (report_work_items.length > 0) {
                 await supabase.from('report_work_items').insert(
-                    report_work_items.map(i => ({ report_id: newReport.id, description: i.description }))
+                    report_work_items.map(i => ({ 
+                    report_id: newReport.id,
+                    description: i.description,
+                    plan_start_date: i.plan_start_date,
+                    plan_end_date: i.plan_end_date,
+                    actual_start_date: i.actual_start_date,
+                    actual_end_date: i.actual_end_date
+                 }))
                 );
             }
             // 插入子表：出工紀錄
@@ -633,7 +678,7 @@ window.batchCopyReport = async (oldDate, staff, project, index) => {
                         report_id: newReport.id, 
                         item_name: l.item_name, 
                         today_count: l.today_count, 
-                        total_count: 0 
+                        total_count: l.total_count 
                     }))
                 );
             }
@@ -692,65 +737,76 @@ window.getSelectedIds = () => {
     return Array.from(checkboxes).map(cb => cb.value);
 };
 
-// 🚀 Excel 匯出核心功能
-        window.exportToExcel = () => {
-            if (currentData.length === 0) return alert("目前沒有資料可匯出");
+window.exportToExcel = () => {
+    if (currentData.length === 0) return alert("目前沒有資料可匯出");
 
-            // 1. 整理資料格式
-            const excelRows = currentData.map(d => ({
-                "日期": d.report_date,
-                "工務人員": d.staff_name,
-                "專案名稱": d.project_name,
-                "日報類別": d.report_type, // 🚀 新增類別欄位
-                "大類編號": d.parent_no,    // 🚀 新增編號欄位
-                "施工大類": d.category,
-                "作業編號": d.sub_no,       // 🚀 新增編號欄位
-                "作業細項": d.sub_category,
-                "棟別": d.buildings?.join(',') || '',
-                "樓層": d.floors?.join(',') || '',
-                "工作描述": d.report_work_items.map(i => i.description).join('\n'),
-                "計劃日期": `${d.plan_start_date} ~ ${d.plan_end_date}`,
-                "實際日期": `${d.actual_start_date} ~ ${d.actual_end_date}`,
-                "出工明細": d.report_labor_records.map(l => `${l.item_name}:${l.today_count}人`).join('\n'),
-                "狀態": d.status,
-                "簽呈": d.liststatus
-            }));
+    // 1. 整理資料格式
+    const excelRows = currentData.map(d => {
+        // 🚀 從子表 report_work_items 提取資料
+        const workItems = d.report_work_items || [];
 
-            // 2. 建立工作表
+        const workDescs = workItems.map(i => i.description || '-').join('\n');
+        
+        const planDates = workItems.map(i => 
+            (i.plan_start_date || i.plan_end_date) 
+            ? `${i.plan_start_date || ''} ~ ${i.plan_end_date || ''}` 
+            : '-'
+        ).join('\n');
+
+        const actualDates = workItems.map(i => 
+            (i.actual_start_date || i.actual_end_date) 
+            ? `${i.actual_start_date || ''} ~ ${i.actual_end_date || ''}` 
+            : '-'
+        ).join('\n');
+
+        return {
+            "日期": d.report_date,
+            "工務人員": d.staff_name,
+            "專案名稱": d.project_name,
+            "日報類別": d.report_type,
+            "大類編號": d.parent_no,
+            "施工大類": d.category,
+            "作業編號": d.sub_no,
+            "作業細項": d.sub_category,
+            "棟別": d.buildings?.join(',') || '',
+            "樓層": d.floors?.join(',') || '',
+            "工作描述": workDescs,
+            "計畫日期": planDates,  // 🚀 獨立欄位
+            "實際日期": actualDates, // 🚀 獨立欄位
+            "出工明細": d.report_labor_records.map(l => `${l.item_name}:${l.today_count}人`).join('\n'),
+            "狀態": d.status,
+            "簽呈": d.liststatus
+        };
+    });
+
     const worksheet = XLSX.utils.json_to_sheet(excelRows);
     const workbook = XLSX.utils.book_new();
 
-    // 🚀 3. 設定欄位索引 8 (工作描述) 與 13 (出工明細) 的自動換行
+    // 2. 設定自動換行樣式 (包含描述與兩個日期欄位)
     const range = XLSX.utils.decode_range(worksheet['!ref']);
-    const wrapCols = [10, 13]; // 定義需要換行的欄位索引
-
     for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-        wrapCols.forEach(C => {
+        // 索引 10 (描述), 11 (計畫), 12 (實際), 13 (出工)
+        [10, 11, 12, 13].forEach(C => { 
             const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
             if (worksheet[cellAddress]) {
-                // 如果 SheetJS 版本支援樣式設定
                 if (!worksheet[cellAddress].s) worksheet[cellAddress].s = {};
-                worksheet[cellAddress].s.alignment = { 
-                    wrapText: true, 
-                    vertical: 'top' 
-                };
+                worksheet[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
             }
         });
     }
 
-    // 4. 設定欄位寬度，讓換行更美觀
+    // 3. 設定欄位寬度
     worksheet['!cols'] = [
-        { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, // 0-3
-        { wch: 8 },  { wch: 15 }, { wch: 8 },  { wch: 15 }, // 4-7
-        { wch: 10 }, { wch: 20 }, { wch: 30 }, { wch: 10 }, // 8-11 (10是工作描述)
-        { wch: 10 }, { wch: 15 }, { wch: 20 }               // 12-14 (14是出工明細)
+        { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 10 }, 
+        { wch: 8 },  { wch: 15 }, { wch: 8 },  { wch: 15 }, 
+        { wch: 10 }, { wch: 10 }, { wch: 35 }, { wch: 22 }, { wch: 22 }, { wch: 20 },
+        { wch: 10 }, { wch: 10 }
     ];
-            XLSX.utils.book_append_sheet(workbook, worksheet, "報工明細");
 
-            // 3. 下載檔案
-            const fileName = `工程報工明細_${document.getElementById('startDate').value}_${document.getElementById('endDate').value}.xlsx`;
-            XLSX.writeFile(workbook, fileName);
-        };
+    XLSX.utils.book_append_sheet(workbook, worksheet, "報工明細");
+    const fileName = `工程報工明細_${document.getElementById('startDate').value}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+};
     </script>
 </body>
 </html>
